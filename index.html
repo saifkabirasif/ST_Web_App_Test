@@ -1,0 +1,258 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="UTF-8" />
+    <meta http-equiv="X-UA-Compatible" content="IE=edge" />
+    <meta
+      name="viewport"
+      content="width=device-width, initial-scale=1, shrink-to-fit=no"
+    />
+    <title>stlite app</title>
+    <link
+      rel="stylesheet"
+      href="https://cdn.jsdelivr.net/npm/@stlite/mountable@0.60.2/build/stlite.css"
+    />
+  </head>
+  <body>
+    <div id="root"></div>
+    <script src="https://cdn.jsdelivr.net/npm/@stlite/mountable@0.60.2/build/stlite.js"></script>
+    <script>
+stlite.mount(
+  {
+    requirements: ["pandas", "plotly", "openpyxl"],
+    entrypoint: "streamlit_app.py",
+    files: {
+"streamlit_app.py": `
+# Libraries
+import os
+import pandas as pd
+import streamlit as st
+# import duckdb
+# from pandasql import sqldf
+import plotly.express as px
+import plotly.graph_objects as go
+import random
+
+# Path for future use
+full_path=os.path.realpath(__file__)
+path,filename=os.path.split(full_path)
+
+st.set_page_config(
+    layout="wide",
+    page_title="Financial Dashboard",
+    page_icon=":bar_chart:"
+    )
+
+st.title("Financial Dashboard")
+st.markdown("""
+            _Author: Saif Kabir Asif_
+            """)
+
+@st.cache_data
+def load_data(path:str):
+    data=pd.read_excel(path)
+    return data
+
+
+# st.write(full_path)
+# st.write(path)
+# Hard-coded file link
+# df=load_data(path+"/Data/Financial Data Clean.xlsx")
+# st.write(df)
+
+with st.sidebar:
+    st.header("Configs")
+    uploaded_file=st.file_uploader("Choose a file ...",)
+    
+
+if uploaded_file is None:
+    st.info("Upload a file through config",icon="ℹ")
+    st.stop()
+    # uploaded_file=path+"/Data/Financial Data Clean.xlsx"
+
+df=load_data(uploaded_file)
+
+with st.expander("Data Preview"):
+    st.dataframe(
+        df,
+        column_config={
+            "Year": st.column_config.NumberColumn(format="%d")
+        }
+        )
+
+all_months = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"]
+
+def plot_bottom_left():
+    ### Duck DB Implementation
+    # sales_data=duckdb.sql(
+    #     f"""
+    #     with sales_data as (
+    #         Select
+    #         Scenario,{",".join(all_months)}
+    #         from df
+    #         where Year=2023
+    #         and Account='Sales'
+    #         and business_unit='Software'
+    #     )
+        
+    #     UNPIVOT sales_data
+    #     ON {','.join(all_months)}
+    #     INTO
+    #         NAME month
+    #         VALUE sales
+        
+    #     """
+    # ).df()
+    
+    ### Pandas vanilla implementation
+    
+    sales_data=df.loc[
+        :,
+        [
+            "Scenario",
+            "Year",
+            "Account",
+            "business_unit"]+all_months].query(
+        "Year==2023 & Account=='Sales' & business_unit=='Software'"
+    ).melt(
+        id_vars=['Scenario'],
+        value_vars=all_months,
+        var_name="month",
+        value_name="sales"
+    )
+    
+    fig=px.line(
+        sales_data,
+        x="month",
+        y="sales",
+        color="Scenario",
+        markers=True,
+        text="sales",
+        title="Budget vs Forecast"
+    )
+    
+    fig.update_traces(textposition='top center')
+    
+    # st.dataframe(sales_data)
+    st.plotly_chart(fig,use_container_width=True)
+
+plot_bottom_left()
+
+
+def plot_metric(label,value,prefix="",suffix="",
+                show_graph=False,color_graph="#c30c3e"):
+    fig=go.Figure()
+    
+    fig.add_trace(
+        go.Indicator(
+            value=value,
+            gauge={"axis":{"visible":False}},
+            number={
+                "prefix":prefix,
+                "suffix":suffix,
+                "font.size":28,
+            },
+            title={
+                "text":label,
+                "font":{"size": 24}
+            }
+        )
+    )
+    
+    if show_graph:
+        fig.add_trace(
+            go.Scatter(
+                y=random.sample(range(0,101),30),
+                hoverinfo="skip",
+                fill="tozeroy",
+                fillcolor=color_graph,
+                line={
+                    "color": color_graph
+                }
+            )
+        )
+    
+    
+    # fig.update_layout()
+    
+    st.plotly_chart(fig,use_container_width=True)
+
+
+def plot_gauge(indicator_number,indicator_color,
+               indicator_suffix,indicator_title,
+               max_bound
+               ):
+    fig=go.Figure()
+    
+    fig.add_trace(
+        go.Indicator(
+            value=indicator_number,
+            mode='gauge+number',
+            domain={"x":[0,1],"y":[0,1]},
+            gauge={
+                "axis":{"range":[0,max_bound],"tickwidth":1},
+                "bar":{"color":indicator_color}
+                },
+            number={
+                "suffix":indicator_suffix,
+                "font.size":28,
+            },
+            title={
+                "text":indicator_title,
+                "font":{"size": 24}
+            }
+        )
+    )
+
+#     # fig.update_layout()
+    
+    st.plotly_chart(fig,use_container_width=True)
+
+plot_metric(
+    label="Total Accounts Receivable",
+    value=6612341,
+    prefix="$",
+    suffix="",
+    show_graph=True,
+    color_graph="#C30C3E"
+)
+
+plot_gauge(
+    indicator_number=1.86,
+    indicator_color="#c30c3e",
+    indicator_suffix="%",
+    indicator_title="Current Ratio",
+    max_bound=3
+)
+
+st.write(
+    df.loc[
+        :,
+        [
+            "Scenario",
+            "Year",
+            "Account",
+            "business_unit"]+all_months]
+    .query(
+        "Year==2023 & Account=='Sales' & business_unit=='Software'"
+        )
+    .melt(
+        id_vars=['Scenario'],
+        value_vars=all_months,
+        var_name="month",
+        value_name="sales"
+    )
+
+)
+
+`,
+
+},
+  },
+  document.getElementById("root")
+)
+
+    </script>
+  </body>
+  <!-- Generated from stlite sharing (https://edit.share.stlite.net/), and the source version is bf7071c198cff63e2c83ff858e365f2462242a62 -->
+</html>
